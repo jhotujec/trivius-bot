@@ -17,6 +17,8 @@ AUX_DRIVER = webdriver.Chrome()
 
 
 class Question(object):
+    BROWSER = "http://google.com"
+
     def __init__(self, question):
         self.question = question
         self.answers = []
@@ -25,28 +27,33 @@ class Question(object):
     def title(self):
         return self.question.text
 
-    def get_answers(self):
-        AUX_DRIVER.get("http://google.com")
+    def _get_answers(self):
+        AUX_DRIVER.get(self.BROWSER)
         q = AUX_DRIVER.find_element_by_css_selector("[name='q']")
         q.send_keys(self.title)
         q.send_keys(Keys.RETURN)
 
     def answer(self):
-        self.get_answers()
+        self._get_answers()
         answers = MAIN_DRIVER.find_elements_by_css_selector("div.col-md-6 div.answer")
         for answer in answers:
-            count = AUX_DRIVER.page_source.count(self.title)
-            is_in = True if self.title in AUX_DRIVER.page_source else False
-            a = {
-                'score': int(count) + int(is_in),
+            count = AUX_DRIVER.page_source.count(answer.text)
+            is_in = int(answer.text in AUX_DRIVER.page_source)
+            self.answers.append({
+                'confidence': count + is_in,
                 'answer': answer
-            }
-            self.answers.append(a)
+            })
 
-            logger.info(str(a))
+        sorted_answers = sorted(self.answers, key=lambda k: k['confidence'], reverse=True)
 
-        newlist = sorted(self.answers, key=lambda k: k['score'])
-        newlist[0]['answer'].click()
+        for answer in sorted_answers:
+            l = "{} \t\t\t Confidence:{}".format(answer['answer'].text, answer['confidence'])
+            logger.info(l)
+
+        final_answer = sorted_answers[0]['answer']
+        final_answer.click()
+        logger.warning("Clicked on {}".format(final_answer.text))
+
 
 class Bot(object):
     def __init__(self, topic, email, pax):
@@ -109,10 +116,13 @@ class Bot(object):
                 logger.info("Countdown loaded.. ")
 
                 self._wait_for_element("div.col-md-6 div.answer", self.wait)
-                question.answer()
 
+                logger.info("====================================")
+                logger.info(question.title)
+                logger.info("====================================")
                 logger.info("Answers loaded.. ")
-                logger.info("===== {} ====".format(question.title))
+                question.answer()
+                logger.info("====================================")
                 self.answer_count += 1
                 time.sleep(2)
             else:
@@ -125,16 +135,3 @@ class Bot(object):
 
     def quit(self):
         MAIN_DRIVER.quit()
-
-
-if __name__ == "__main__":
-    # Run my bot
-
-    bot = Bot(
-        "https://triviusgame.com/game/general/general-knowledge",
-        "<email>",
-        "<password>"
-    )
-
-    bot.start()
-    bot.quit()
